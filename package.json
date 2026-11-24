@@ -1,0 +1,20 @@
+{
+  "name": "fisch2",
+  "version": "1.0.0",
+  "description": "3D 釣魚遊戲（Three.js）",
+  "main": "index.html",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --minify --target=es2020 --outfile=dist/game.js",
+    "dev": "esbuild src/main.js --bundle --format=iife --sourcemap --target=es2020 --outfile=dist/game.js --watch --servedir=."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
