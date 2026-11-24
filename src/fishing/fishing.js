@@ -9,9 +9,43 @@ import { clamp, damp, rand, lerp } from '../core/noise.js';
 import { state, addFishToInventory, saveState } from '../state.js';
 import { makeTextCanvas } from '../world/props.js';
 
+// "!" colour shown when a fish bites, by rarity
+const EXCL_STYLE = {
+  trash: { fill: '#ff2a2a', stroke: '#ffffff' },
+  common: { fill: '#ff2a2a', stroke: '#ffffff' },     // 普通：紅
+  rare: { fill: '#2f8cff', stroke: '#ffffff' },       // 稀有：藍
+  epic: { fill: '#a347ff', stroke: '#ffffff' },       // 史詩：紫
+  legendary: { fill: '#ffd21f', stroke: '#5a3a00' },  // 傳奇：黃
+  mythical: { fill: '#ff2a2a', stroke: '#ffffff' },   // 神話：紅
+  exotic: { fill: 'rainbow', stroke: '#ffffff' },     // 異國情調：彩色
+  secret: { fill: '#000000', stroke: '#ffffff' },     // 秘密：黑
+};
+const exclCache = {};
+function exclamationTexture(rarity) {
+  if (exclCache[rarity]) return exclCache[rarity];
+  const st = EXCL_STYLE[rarity] || EXCL_STYLE.common;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.font = 'bold 120px "Arial Black", sans-serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.lineWidth = 16; g.strokeStyle = st.stroke;
+  g.strokeText('!', 64, 66);
+  if (st.fill === 'rainbow') {
+    const grd = g.createLinearGradient(0, 8, 0, 120);
+    ['#ff3b3b', '#ff9b2f', '#ffe733', '#45e05a', '#33b5ff', '#7a5cff', '#e04bff'].forEach((col, i, a) => grd.addColorStop(i / (a.length - 1), col));
+    g.fillStyle = grd;
+  } else g.fillStyle = st.fill;
+  g.fillText('!', 64, 66);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  exclCache[rarity] = tex;
+  return tex;
+}
+
 function exclamationSprite() {
-  const tex = makeTextCanvas([{ text: '!', font: 'bold 120px "Arial Black", sans-serif', color: '#ffe14a', strokeW: 14 }], { w: 128, h: 128, stroke: '#c0261a' });
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, fog: false }));
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: exclamationTexture('common'), transparent: true, depthTest: false, fog: false }));
   s.renderOrder = 20;
   s.visible = false;
   return s;
@@ -125,8 +159,6 @@ export class Fishing {
       this.state = 'charging';
       this.power = 0; this.powerDir = 1;
       this.g.player.faceCamera();
-    } else if (this.state === 'waiting') {
-      this.retrieve();
     } else if (this.state === 'reeling') {
       this.holding = true;
     }
@@ -217,9 +249,10 @@ export class Fishing {
     this.g.water.addRipple(b.x, b.z, 1.4);
     this.g.sound.bite();
     this.g.cam.shake(0.25);
-    this.excl.visible = true;
-    this.excl.scale.set(0.01, 0.01, 1);
-    this.excl.position.copy(this.g.player.pos).y += 3.05;
+    // big "!" above the head, coloured by rarity (HTML overlay = exact, crisp colours)
+    this.g.ui.biteExcl(this.catch.fish.rarity);
+    const sp0 = this.g.worldToScreen(this.g.player.pos.clone().add(new THREE.Vector3(0, 2.75, 0)));
+    this.g.ui.biteExclPos(sp0.x, sp0.y);
     this.rod.impulse(10);
   }
 
@@ -424,11 +457,9 @@ export class Fishing {
         b.x += Math.sin(time * 30) * 0.01;
         rod.targetBend = 0.7;
         sag = 0.0;
-        // big "!" pops up above the player's head
-        const pp = this.g.player.pos;
-        this.excl.position.set(pp.x, pp.y + 3.05 + Math.sin(this.t * 12) * 0.06, pp.z);
-        const s = Math.min(1, this.t * 7) * (1 + Math.max(0, 0.35 - this.t) * 2 + Math.sin(this.t * 10) * 0.05);
-        this.excl.scale.set(1.3 * s, 1.3 * s, 1);
+        // keep the "!" pinned above the player's head
+        const sp = this.g.worldToScreen(this.g.player.pos.clone().add(new THREE.Vector3(0, 2.75, 0)));
+        this.g.ui.biteExclPos(sp.x, sp.y);
         if (this.t > 0.65) this.startReel();
         break;
       }
@@ -554,6 +585,7 @@ export class Fishing {
     }
     this.poseTarget = pose;
     if (this.state !== 'bite' && this.state !== 'shake') this.excl.visible = false;
+    if (this.state !== 'bite') this.g.ui.biteExcl(null);
     rod.update(dt);
     if (rod.visible) rod.updateLine(sag, wobble, time);
   }

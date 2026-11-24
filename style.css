@@ -200,3 +200,15 @@ body.in-dialogue #hotbar, body.in-dialogue #rodStats, body.in-dialogue #interact
 .qs-title { font-size: 40px; font-weight: 900; }
 .qs-sub { font-size: 18px; opacity: .85; }
 #qsBack { padding: 12px 34px; font-size: 20px; font-weight: 900; font-family: inherit; color: #fff; border-radius: 14px; border: 3px solid #fff; background: linear-gradient(180deg, #4fb2ff, #2073d8); cursor: pointer; }
+
+/* ---------- bite "!" above the player's head (colour = rarity) */
+#biteExcl { position: absolute; transform: translate(-50%, -100%); font: 900 96px "Arial Black", "Segoe UI", sans-serif; line-height: 1;
+  -webkit-text-stroke: 6px #fff; paint-order: stroke fill; filter: drop-shadow(0 4px 6px rgba(0,0,0,.55)); animation: exPop .45s cubic-bezier(.2,1.8,.4,1); pointer-events: none; }
+@keyframes exPop { from { transform: translate(-50%, -100%) scale(.1); } 60% { transform: translate(-50%, -100%) scale(1.25); } to { transform: translate(-50%, -100%) scale(1); } }
+#biteExcl.ex-trash, #biteExcl.ex-common { color: #ff1f1f; }
+#biteExcl.ex-rare { color: #1f7bff; }
+#biteExcl.ex-epic { color: #9b30ff; }
+#biteExcl.ex-legendary { color: #ffd000; -webkit-text-stroke-color: #4a2e00; }
+#biteExcl.ex-mythical { color: #ff1f1f; }
+#biteExcl.ex-exotic { color: transparent; background: linear-gradient(180deg, #ff3b3b, #ff9b2f, #ffe733, #45e05a, #33b5ff, #7a5cff, #e04bff); -webkit-background-clip: text; background-clip: text; }
+#biteExcl.ex-secret { color: #000; -webkit-text-stroke-color: #fff; }

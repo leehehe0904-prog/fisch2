@@ -128,6 +128,18 @@ export class UI {
     c.textContent = text;
     this.shakeLayer.appendChild(c);
   }
+  /** big "!" above the player when a fish bites; null hides it */
+  biteExcl(rarity) {
+    const el = document.querySelector('#biteExcl');
+    if (!rarity) { if (!el.classList.contains('hidden')) el.classList.add('hidden'); return; }
+    el.className = 'ex-' + rarity;
+    void el.offsetWidth; // restart pop animation
+  }
+  biteExclPos(x, y) {
+    const el = document.querySelector('#biteExcl');
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+  }
+
   clearShake() {
     for (const el of [...this.shakeLayer.children]) {
       if (el.classList.contains('pop')) setTimeout(() => el.remove(), 200);
