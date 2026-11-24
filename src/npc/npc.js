@@ -27,11 +27,11 @@ export class NPC {
     this.rig.root.position.copy(this.pos);
     game.scene.add(this.rig.root);
     this.label = makeLabelSprite(def.name, def.title);
-    this.label.position.set(0, 3.55, 0);
+    this.label.position.set(0, 2.85, 0);
     this.rig.root.add(this.label);
     this.marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: marker('!'), transparent: true, depthWrite: false, fog: false }));
     this.marker.scale.set(1.1, 1.1, 1);
-    this.marker.position.set(0, 4.5, 0);
+    this.marker.position.set(0, 3.6, 0);
     this.marker.visible = false;
     this.marker.renderOrder = 11;
     this.rig.root.add(this.marker);
@@ -44,6 +44,9 @@ export class NPC {
 
   update(dt, time, playerPos) {
     const d = this.pos.distanceTo(playerPos);
+    // far-away NPCs (other island) are hidden and not animated
+    this.rig.root.visible = d < 170;
+    if (!this.rig.root.visible) return;
     let targetYaw = this.baseYaw;
     if (d < 9 || this.talking) targetYaw = Math.atan2(playerPos.x - this.pos.x, playerPos.z - this.pos.z);
     this.yaw = angleDamp(this.yaw, targetYaw, 5, dt);
@@ -66,7 +69,7 @@ export class NPC {
       this.marker.material.needsUpdate = true;
     }
     if (m) {
-      this.marker.position.y = 4.5 + Math.sin(time * 3) * 0.15;
+      this.marker.position.y = 3.6 + Math.sin(time * 3) * 0.15;
       const s = 1.1 + Math.sin(time * 6) * 0.05;
       this.marker.scale.set(s, s, 1);
     }

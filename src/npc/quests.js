@@ -52,9 +52,9 @@ export const QUESTS = {
     ],
   },
   rare1: {
-    title: '稀有魚調查', giver: 'lin', reward: 600, requires: ['pond3'],
+    title: '傳奇魚調查', giver: 'lin', reward: 600, requires: ['pond3'],
     stages: [
-      { kind: 'event', type: 'catch', count: 1, text: '釣到一條「稀有」以上的魚', filter: (d) => rarityById[d.fish.rarity].index >= rarityById.rare.index },
+      { kind: 'event', type: 'catch', count: 1, text: '釣到一條「傳奇」以上的魚', filter: (d) => rarityById[d.fish.rarity].index >= rarityById.legendary.index },
       { kind: 'turnin', npc: 'lin', text: '回報研究員・林博士', target: 'lin' },
     ],
   },

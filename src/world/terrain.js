@@ -123,6 +123,37 @@ const COL = {
   dirt: C(0xa98a5e), mud: C(0x5d5440),
 };
 
+let _groundTex = null;
+function groundTexture() {
+  if (_groundTex) return _groundTex;
+  const s = 512;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgb(232,232,232)'; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < 60; i++) {
+    const v = 200 + Math.random() * 55;
+    g.fillStyle = `rgba(${v},${v},${v},0.25)`;
+    g.beginPath(); g.arc(Math.random() * s, Math.random() * s, 20 + Math.random() * 60, 0, 7); g.fill();
+  }
+  for (let i = 0; i < 26000; i++) {
+    const v = 150 + Math.random() * 105;
+    g.fillStyle = `rgba(${v},${v},${v},0.5)`;
+    g.fillRect(Math.random() * s, Math.random() * s, 1 + Math.random() * 1.5, 1 + Math.random() * 1.5);
+  }
+  for (let i = 0; i < 260; i++) {
+    const v = 120 + Math.random() * 80;
+    g.fillStyle = `rgba(${v},${v},${v},0.45)`;
+    g.beginPath(); g.ellipse(Math.random() * s, Math.random() * s, 1.5 + Math.random() * 3, 1 + Math.random() * 2, Math.random() * 3, 0, 7); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  _groundTex = t;
+  return t;
+}
+
 export function buildIslandMesh(isl) {
   const size = isl.radius * 2 * 1.95;
   const seg = Math.round(size / 1.15);
@@ -174,7 +205,11 @@ export function buildIslandMesh(isl) {
     colors[i * 3] = c.r * v; colors[i * 3 + 1] = c.g * v; colors[i * 3 + 2] = c.b * v;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+  // fine ground detail (sand grains / grass / pebbles) multiplied over the vertex colours
+  const tex = groundTexture().clone();
+  tex.needsUpdate = true;
+  tex.repeat.set(size / 3.5, size / 3.5);
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, map: tex, bumpMap: tex, bumpScale: 1.4 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(isl.cx, 0, isl.cz);
   mesh.receiveShadow = true;

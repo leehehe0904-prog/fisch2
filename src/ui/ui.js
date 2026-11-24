@@ -4,7 +4,7 @@ import { RODS } from '../fishing/rod.js';
 
 const $ = (s) => document.querySelector(s);
 
-const RARITY_ICON = { trash: '🗑️', common: '🐟', uncommon: '🐟', unusual: '🐠', rare: '🐠', legendary: '🦈', mythical: '🐉', exotic: '✨' };
+const RARITY_ICON = { trash: '🗑️', common: '🐟', rare: '🐟', epic: '🐠', legendary: '🐠', mythical: '🦈', exotic: '🐉', secret: '✨' };
 function itemIcon(def) {
   if (def.shape === 'boot') return '🥾';
   if (def.shape === 'can') return '🥫';
@@ -17,7 +17,9 @@ function itemIcon(def) {
   return RARITY_ICON[def.rarity] || '🐟';
 }
 export function rarityStyle(r) {
-  return r.color === 'rainbow' ? { cls: 'rainbow', color: '#fff' } : { cls: '', color: r.color };
+  if (r.color === 'rainbow') return { cls: 'rainbow', color: '#fff' };
+  if (r.id === 'secret') return { cls: 'secret-glow', color: r.color };
+  return { cls: '', color: r.color };
 }
 export const mutationById = Object.fromEntries(MUTATIONS.map((m) => [m.id, m]));
 
@@ -40,7 +42,7 @@ export class UI {
     this.questsEl = $('#quests');
     this.rodStatsEl = $('#rodStats');
     this.wp = $('#waypoint');
-    this.panels = { backpack: $('#backpack'), help: $('#help'), dex: $('#dex') };
+    this.panels = { backpack: $('#backpack'), help: $('#help'), dex: $('#dex'), menu: $('#menu') };
     for (const [k, p] of Object.entries(this.panels)) p.querySelector('.close').onclick = () => this.togglePanel(k, false);
     this.onSelectSlot = null;
     this._zoneTimer = null;
@@ -67,9 +69,10 @@ export class UI {
     }
   }
 
-  setClock(text, night) {
+  setClock(text, night, sub = '') {
     $('#clockText').textContent = text;
     $('#clockIcon').textContent = night ? '🌙' : '☀️';
+    $('#clockSub').textContent = sub;
   }
 
   showZone(name, sub) {
@@ -107,7 +110,7 @@ export class UI {
   }
 
   // ---------------------------------------------------------------- shake
-  spawnShake(onClick, remaining) {
+  spawnShake(onClick, text) {
     this.clearShake();
     const b = document.createElement('button');
     b.className = 'shake';
@@ -122,7 +125,7 @@ export class UI {
     this.shakeLayer.appendChild(b);
     const c = document.createElement('div');
     c.className = 'shake-count';
-    c.textContent = `魚上鉤了！快點擊 SHAKE（剩 ${remaining} 下）`;
+    c.textContent = text;
     this.shakeLayer.appendChild(c);
   }
   clearShake() {
@@ -140,7 +143,7 @@ export class UI {
     this.reelBar.classList.toggle('out', !mg.inBar);
     this.reelFish.style.left = `${mg.fishPos * 100}%`;
     this.reelFill.style.width = `${Math.max(0, Math.min(1, mg.progress)) * 100}%`;
-    this.reelPct.textContent = `${Math.floor(Math.max(0, mg.progress) * 100)}%`;
+
     this.reelEl.classList.toggle('shaking', !mg.inBar);
     this.reelWarn.textContent = mg.overweight ? '⚠ 超過釣竿最大重量！收線非常吃力' : (!mg.inBar ? '魚在掙扎！' : '');
   }

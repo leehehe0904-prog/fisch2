@@ -12,7 +12,18 @@ export const state = {
   nextUid: 1,
   totalCaught: 0,
   tutorialSeen: false,
+  playerName: null, // chosen when the tutorial quest is completed
 };
+
+/** Validate a player name. Returns { ok, name, error }. */
+export function cleanPlayerName(raw) {
+  // strip control characters / angle brackets, collapse whitespace
+  const name = String(raw || '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim();
+  const len = [...name].length;
+  if (len === 0) return { ok: false, name, error: '名字不能是空白的喔！' };
+  if (len > 12) return { ok: false, name, error: `名字太長了（${len}/12 個字）` };
+  return { ok: true, name, error: '' };
+}
 
 export function loadState() {
   try {

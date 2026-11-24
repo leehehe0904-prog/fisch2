@@ -11,8 +11,10 @@
     <div id="zoneBanner"><div class="zb-name"></div><div class="zb-line"></div><div class="zb-sub"></div></div>
 
     <div id="topRight">
+      <div id="playerNameTag" class="hidden"></div>
       <div id="money"><span class="coin">$</span><span id="moneyText">0</span></div>
-      <div id="clock"><span id="clockIcon">☀</span><span id="clockText">07:00</span></div>
+      <div id="clock"><span id="clockIcon">☀</span><span id="clockText">00:00:00</span></div>
+      <div id="clockSub"></div>
     </div>
 
     <div id="quests"></div>
@@ -31,7 +33,7 @@
           <svg viewBox="0 0 64 40" width="44" height="28"><path d="M4 20 L16 8 L16 32 Z" fill="#1d2a3a"/><ellipse cx="38" cy="20" rx="22" ry="13" fill="#1d2a3a"/><circle cx="50" cy="16" r="3" fill="#fff"/></svg>
         </div>
       </div>
-      <div class="reel-progress"><div class="fill"></div><div class="reel-pct"></div></div>
+      <div class="reel-progress"><div class="fill"></div></div>
       <div class="reel-warn"></div>
     </div>
 
@@ -44,6 +46,7 @@
       <button id="btnBag" title="背包 (B)">🎒<span>背包</span></button>
       <button id="btnDex" title="圖鑑 (N)">📖<span>圖鑑</span></button>
       <button id="btnHelp" title="操作說明 (H)">❔<span>說明</span></button>
+      <button id="btnMenu" title="選單 (Esc)">☰<span>選單</span></button>
     </div>
 
     <div id="waypoint" class="hidden"><div class="wp-arrow">▲</div><div class="wp-label"></div></div>
@@ -68,14 +71,26 @@
       <div class="dex-grid"></div>
     </div>
 
+    <div id="menu" class="panel hidden">
+      <div class="panel-head"><span>☰ 選單</span><button class="close">✕</button></div>
+      <div class="menu-body">
+        <button id="mResume" class="green">▶ 繼續遊戲</button>
+        <button id="mHelp">❔ 操作說明</button>
+        <button id="mTitle">🏠 回到主畫面</button>
+        <button id="mQuit" class="red">⏻ 退出遊戲</button>
+        <div class="menu-note">進度會自動存檔，退出後下次打開會從這裡繼續。</div>
+      </div>
+    </div>
+
     <div id="help" class="panel hidden">
       <div class="panel-head"><span>❔ 操作說明</span><button class="close">✕</button></div>
       <div class="help-body">
         <p><b>WASD / 方向鍵</b> 移動　<b>Shift</b> 奔跑　<b>空白鍵</b> 跳躍</p>
         <p><b>按住滑鼠右鍵拖曳</b> 轉動視角　<b>滾輪</b> 縮放</p>
+        <p><b>Esc / ☰</b> 選單（回到主畫面、退出遊戲）</p>
         <p><b>1</b> 拿出 / 收起釣竿　<b>2~9</b> 拿起背包裡的魚</p>
         <p><b>按住左鍵</b> 蓄力，<b>放開</b> 甩竿（要甩到水裡）</p>
-        <p>魚上鉤時，快速點擊畫面上的 <b>SHAKE</b> 按鈕</p>
+        <p>浮標落水後畫面會出現 <b>SHAKE</b> 按鈕，點越多下魚越快上鉤；頭上冒出 <b>!</b> 就是魚上鉤了</p>
         <p>收線小遊戲：<b>按住左鍵/空白鍵</b> 白條往右、放開往左，讓魚待在白條內直到進度條滿</p>
         <p><b>E</b> 與 NPC 對話 / 上下船　<b>B</b> 背包　<b>N</b> 圖鑑　<b>H</b> 說明</p>
         <p>開船：<b>W/S</b> 油門 / 倒退，<b>A/D</b> 轉向</p>
@@ -86,6 +101,23 @@
         <p>控制力：讓收線小遊戲的白條變寬</p>
         <p>復原力：魚不在白條內時，進度條掉得比較慢、魚也比較不會亂竄</p>
         <p>最大重量：超過這個重量的魚收線進度會非常緩慢</p>
+      </div>
+    </div>
+
+    <div id="nameModal" class="hidden">
+      <div class="nm-card">
+        <div class="nm-title">✏️ 取一個名字吧！</div>
+        <div class="nm-sub">之後大家都會這樣叫你（1~12 個字，中英文都可以）</div>
+        <div class="nm-preview"><span id="nmPreview">？？？</span></div>
+        <div class="nm-row">
+          <input id="nmInput" type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="輸入你的名字" />
+          <button id="nmDice" title="隨機名字">🎲</button>
+        </div>
+        <div class="nm-error"></div>
+        <div class="nm-btns">
+          <button id="nmCancel" class="gray">以後再說</button>
+          <button id="nmOk" class="green">確定</button>
+        </div>
       </div>
     </div>
 
@@ -100,6 +132,14 @@
       <button id="btnStart">開始釣魚</button>
       <button id="btnReset" class="small">重新開始（清除存檔）</button>
       <div class="start-tip">WASD 移動・右鍵拖曳轉視角・按住左鍵甩竿・E 互動</div>
+    </div>
+  </div>
+
+  <div id="quitScreen" class="hidden">
+    <div class="qs-inner">
+      <div class="qs-title">已存檔，下次見！🎣</div>
+      <div class="qs-sub">現在可以直接關閉這個分頁 / 視窗。</div>
+      <button id="qsBack">回到遊戲</button>
     </div>
   </div>
 

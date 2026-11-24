@@ -99,6 +99,11 @@ export class DayNight {
     dome.renderOrder = -10;
     this.dome = dome;
     scene.add(dome);
+    // small copy of the sky used to bake an environment map (realistic reflections / ambient)
+    this.envScene = new THREE.Scene();
+    this.envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), dome.material));
+    this.envTimer = 0;
+    this.envRT = null;
 
     scene.fog = new THREE.FogExp2(0xbcdcf5, this.fogDensity);
 
@@ -116,6 +121,19 @@ export class DayNight {
     scene.add(this.light.target);
 
     this._a = {}; this._b = {};
+  }
+
+  /** Re-bake the sky into scene.environment every few seconds (sky changes slowly). */
+  updateEnv(renderer, dt) {
+    this.envTimer -= dt;
+    if (this.envTimer > 0) return;
+    this.envTimer = 3;
+    if (!this.pmrem) this.pmrem = new THREE.PMREMGenerator(renderer);
+    const rt = this.pmrem.fromScene(this.envScene, 0, 0.1, 500);
+    if (this.envRT) this.envRT.dispose();
+    this.envRT = rt;
+    this.scene.environment = rt.texture;
+    this.scene.environmentIntensity = 0.55;
   }
 
   get hours() { return (this.t * 24) % 24; }
@@ -172,7 +190,7 @@ export class DayNight {
 
     this.hemi.color.copy(a.hemiSky).lerp(b.hemiSky, f);
     this.hemi.groundColor.copy(a.hemiGround).lerp(b.hemiGround, f);
-    this.hemi.intensity = hemiInt * 1.25;
+    this.hemi.intensity = hemiInt * 0.85;
 
     this.scene.fog.color.copy(this.fogColor);
     this.fogDensity = lerp(0.0026, 0.0042, this.night);

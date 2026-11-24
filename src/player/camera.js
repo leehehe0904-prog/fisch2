@@ -16,12 +16,32 @@ export class CameraRig {
     this.dragging = false;
     this.occluders = null;
     this.ray = new THREE.Raycaster();
-    dom.addEventListener('mousedown', (e) => { if (e.button === 2) { this.dragging = true; this.lx = e.clientX; this.ly = e.clientY; } });
-    window.addEventListener('mouseup', (e) => { if (e.button === 2) this.dragging = false; });
+    // Right-drag rotates the camera. The cursor is locked (hidden & frozen) while
+    // dragging so it does not slide across the screen, then released on mouse-up.
+    this.dom = dom;
+    dom.addEventListener('mousedown', (e) => {
+      if (e.button !== 2) return;
+      this.dragging = true;
+      this.skipMoves = 1; // first event after locking can carry a large bogus delta
+      try {
+        const p = dom.requestPointerLock && dom.requestPointerLock({ unadjustedMovement: true });
+        if (p && p.catch) p.catch(() => { try { const q = dom.requestPointerLock(); if (q && q.catch) q.catch(() => {}); } catch (err) { /* unsupported */ } });
+      } catch (err) { /* pointer lock unsupported: fall back to plain dragging */ }
+    });
+    const stopDrag = () => {
+      this.dragging = false;
+      if (document.pointerLockElement === dom) document.exitPointerLock();
+    };
+    window.addEventListener('mouseup', (e) => { if (e.button === 2) stopDrag(); });
+    window.addEventListener('blur', stopDrag);
+    document.addEventListener('pointerlockchange', () => {
+      // lock lost (e.g. Esc pressed) → stop rotating
+      if (document.pointerLockElement !== dom) this.dragging = false;
+    });
     window.addEventListener('mousemove', (e) => {
       if (!this.dragging) return;
-      const dx = e.clientX - this.lx, dy = e.clientY - this.ly;
-      this.lx = e.clientX; this.ly = e.clientY;
+      if (this.skipMoves > 0) { this.skipMoves--; if (Math.abs(e.movementX) > 60 || Math.abs(e.movementY) > 60) return; }
+      const dx = e.movementX || 0, dy = e.movementY || 0;
       this.yaw -= dx * 0.0055;
       this.pitch = clamp(this.pitch + dy * 0.004, -0.1, 1.35);
     });

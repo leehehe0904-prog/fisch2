@@ -6,6 +6,7 @@ import { waterSurfaceY } from '../world/water.js';
 import { damp, angleDamp } from '../core/noise.js';
 import { buildFishModel, fishVisualLength } from '../fishing/fishModel.js';
 import { fishById } from '../fishing/fishData.js';
+import { makeLabelSprite } from '../world/props.js';
 
 export class Player {
   constructor(game) {
@@ -22,6 +23,16 @@ export class Player {
     this.heldModel = null;
     this.splashTimer = 0;
     this.stepTimer = 0;
+  }
+
+  /** Floating name tag above the head (like other players would see it). */
+  setName(name) {
+    if (this.nameTag) { this.rig.root.remove(this.nameTag); this.nameTag.material.map.dispose(); this.nameTag.material.dispose(); this.nameTag = null; }
+    if (!name) return;
+    this.nameTag = makeLabelSprite(name, null, '#9fe6ff');
+    this.nameTag.scale.set(3.2, 0.8, 1);
+    this.nameTag.position.set(0, 2.75, 0);
+    this.rig.root.add(this.nameTag);
   }
 
   forward() { return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)); }
@@ -81,12 +92,14 @@ export class Player {
     // ---- vertical
     const w = waterAt(this.pos.x, this.pos.z);
     const ground = groundHeight(this.pos.x, this.pos.z, this.pos.y);
-    const swimY = w ? waterSurfaceY(this.pos.x, this.pos.z, w.level, w.pond) - 1.35 : -Infinity;
+    const surf = w ? waterSurfaceY(this.pos.x, this.pos.z, w.level, w.pond) : -Infinity;
+    const deepY = surf - 1.35; // water must be this deep to swim
+    const swimY = surf - 0.15; // feet height while swimming (body is tilted forward)
     const wasSwimming = this.swimming;
-    this.swimming = !!w && ground < swimY - 0.05 && this.pos.y <= swimY + 0.1;
+    this.swimming = !!w && ground < deepY - 0.05 && this.pos.y <= swimY + 0.1;
     if (this.swimming) {
       if (!wasSwimming) {
-        g.fx.splash(new THREE.Vector3(this.pos.x, swimY + 1.35, this.pos.z), 0.9, swimY + 1.35);
+        g.fx.splash(new THREE.Vector3(this.pos.x, surf, this.pos.z), 0.9, surf);
         g.sound.splash(0.8);
         g.water.addRipple(this.pos.x, this.pos.z, 1.2);
         if (g.fishing.equipped) g.selectSlot(0);
@@ -98,7 +111,7 @@ export class Player {
       if (this.splashTimer <= 0 && moving) {
         this.splashTimer = 0.45;
         g.water.addRipple(this.pos.x, this.pos.z, 0.6);
-        g.fx.ring(this.pos.x, swimY + 1.38, this.pos.z, 0.5, 2.2, 1.2, 0.35);
+        g.fx.ring(this.pos.x, surf + 0.03, this.pos.z, 0.5, 2.2, 1.2, 0.35);
       }
     } else {
       this.vel.y -= 32 * dt;
@@ -109,7 +122,7 @@ export class Player {
     // climb out of the water onto docks
     if (this.swimming) {
       for (const c of colliders) {
-        if (c.walkable && c.top > next.y + 0.6 && c.top < swimY + 3.6 && insideCollider(c, next.x, next.z, 0.35)) {
+        if (c.walkable && c.top > next.y + 0.6 && c.top < surf + 2.4 && insideCollider(c, next.x, next.z, 0.35)) {
           next.y = c.top + 0.05; this.swimming = false; this.vel.y = 4; break;
         }
       }
@@ -159,9 +172,11 @@ export class Player {
     const r = this.rig;
     r.root.position.copy(this.pos);
     r.root.rotation.set(0, this.yaw, 0);
+    // the caught fish is held above the head: hide the tag meanwhile
+    if (this.nameTag) this.nameTag.visible = this.g.fishing.state !== 'caught';
     r.animate(dt, time, speed, mode);
     if (this.heldFish && mode !== 'swim') {
-      r.armR.rotation.x = -1.1; r.armR.rotation.z = -0.1;
+      r.armR.rotation.x = -1.1; r.armR.rotation.z = -0.1; r.elbowR.rotation.x = 0;
       if (this.heldModel) this.heldModel.userData.update(time, 0.25);
     }
     this.g.fishing.applyPose(r, dt, time);

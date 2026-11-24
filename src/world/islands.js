@@ -4,6 +4,7 @@ import { addBox, addCircle } from './collision.js';
 import * as P from './props.js';
 import { mulberry32 } from '../core/noise.js';
 import { SCRIPTS } from '../npc/scripts.js';
+import { mergeStatic } from '../core/merge.js';
 
 const faceTo = (ax, az, bx, bz) => Math.atan2(bx - ax, bz - az);
 // local offset rotated like three.js rotation.y
@@ -22,6 +23,8 @@ class Builder {
     this.rng = mulberry32(seed);
     this.excl = []; // {x,z,r} world
     this.npcs = [];
+    this.root = new THREE.Group(); // static scenery, baked into a few meshes at the end
+    this.dynamic = false;
   }
   w(lx, lz) { return { x: this.isl.cx + lx, z: this.isl.cz + lz }; }
   h(x, z) { return terrainHeight(x, z); }
@@ -30,7 +33,7 @@ class Builder {
     obj.position.set(p.x, y ?? this.h(p.x, p.z), p.z);
     obj.rotation.y = rot;
     shadows(obj, cast);
-    this.scene.add(obj);
+    (this.dynamic ? this.scene : this.root).add(obj);
     return obj;
   }
   exclude(lx, lz, r) { const p = this.w(lx, lz); this.excl.push({ x: p.x, z: p.z, r }); }
@@ -148,7 +151,7 @@ function buildNoob(scene, isl, out) {
 
   // campfire + benches
   const cf = P.campfire();
-  B.add(cf, 6, 15);
+  B.dynamic = true; B.add(cf, 6, 15); B.dynamic = false;
   B.exclude(6, 15, 3);
   for (let i = 0; i < 3; i++) {
     const a = i * 2.1 + 0.4;
@@ -171,7 +174,7 @@ function buildNoob(scene, isl, out) {
   // lighthouse on the hill
   const lf = isl.flats[1];
   const lh = P.lighthouse();
-  B.add(lh, lf.x, lf.z, 0.8);
+  B.dynamic = true; B.add(lh, lf.x, lf.z, 0.8); B.dynamic = false;
   P.occluders.push(lh);
   { const p = B.w(lf.x, lf.z); addCircle(p.x, p.z, 3.4, 30); }
   B.exclude(lf.x, lf.z, 6);
@@ -206,6 +209,7 @@ function buildNoob(scene, isl, out) {
   B.groundCover(520);
 
   out.spawn = { ...B.w(13, 9), yaw: faceTo(13, 9, 15, 4) };
+  mergeStatic(B.root, scene);
   out.npcs.push(...B.npcs);
 }
 
@@ -246,7 +250,7 @@ function buildNormal(scene, isl, out) {
     { shirt: 0xc0392b, pants: 0x2d2d2d, apron: 0xf2f2f2, hat: 'bucket', hatColor: 0x2f80ed, hair: 0x222222, skin: 0xd6a26b }, { script: 'merchant' });
 
   // campfire square
-  B.add(P.campfire(), vil.x, vil.z);
+  B.dynamic = true; B.add(P.campfire(), vil.x, vil.z); B.dynamic = false;
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2 + 0.3;
     const x = vil.x + Math.cos(a) * 3.6, z = vil.z + Math.sin(a) * 3.6;
@@ -259,7 +263,7 @@ function buildNormal(scene, isl, out) {
 
   // windmill
   const wf = isl.flats[1];
-  P.occluders.push(B.add(P.windmill(), wf.x, wf.z, faceTo(wf.x, wf.z, vil.x, vil.z)));
+  B.dynamic = true; P.occluders.push(B.add(P.windmill(), wf.x, wf.z, faceTo(wf.x, wf.z, vil.x, vil.z))); B.dynamic = false;
   { const p = B.w(wf.x, wf.z); addCircle(p.x, p.z, 2.6, 40); }
 
   // props
@@ -296,5 +300,6 @@ function buildNormal(scene, isl, out) {
   B.scatter(30, (lx, lz, h, p) => { const s = 0.8 + B.rng() * 2.6; B.add(P.rock(B.rng, s, B.rng() > 0.5 ? P.M.rock : P.M.rockDark), lx, lz, 0, h - 0.3); if (s > 1) addCircle(p.x, p.z, s * 0.8, h + s); }, (h, lx, lz) => (h > -2.5 && h < 1.4) || (h > 10 && lz < -20), 2);
   B.groundCover(800);
 
+  mergeStatic(B.root, scene);
   out.npcs.push(...B.npcs);
 }

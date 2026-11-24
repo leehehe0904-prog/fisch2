@@ -42,7 +42,7 @@ export class Fishing {
     const hand = game.player.rig.handR;
     hand.add(this.rod.group);
     this.rod.group.position.set(0, -0.05, 0.05);
-    this.rod.group.rotation.x = 0.29;
+    this.rod.group.rotation.x = 0.49; // compensates the fixed -0.2 elbow bend so the rod points forward-up
     this.state = 'none';
     this.t = 0;
     this.power = 0;
@@ -151,7 +151,7 @@ export class Fishing {
     this.released = true;
     const p = this.g.player;
     const fwd = p.forward();
-    const dist = 4 + this.power * 24;
+    const dist = 3 + this.power * 11; // max ~14 m: short, controllable casts
     this.castFrom.copy(this.rod.tipWorld());
     const tx = p.pos.x + fwd.x * dist, tz = p.pos.z + fwd.z * dist;
     this.water = waterAt(tx, tz);
@@ -160,8 +160,8 @@ export class Fishing {
     else ty = groundHeight(tx, tz, 999) + 0.12;
     this.castTo.set(tx, ty, tz);
     this.flightT = 0;
-    this.flightDur = 0.55 + this.power * 0.55;
-    this.arc = 2 + this.power * 5.5;
+    this.flightDur = 0.45 + this.power * 0.35;
+    this.arc = 1.5 + this.power * 3;
     this.g.sound.whoosh();
   }
 
@@ -185,9 +185,17 @@ export class Fishing {
     this.nibbleTimer = rand(1.2, 2.5);
     this.pool = this.water.pond ? 'pond' : (this.water.island ? this.water.island.id : 'ocean');
     this.rod.impulse(3);
+    // Fisch-style: the fish is decided now and SHAKE buttons appear right away.
+    // The lure fills by itself (lure speed) and every shake fills it faster.
+    this.catch = rollFish(this.pool, this.stats.luck, this.g.sky.isNight());
+    const ri = rarityById[this.catch.fish.rarity].index;
+    this.shakesNeeded = clamp(4 + Math.floor(ri * 0.8), 4, 10);
+    this.lureProgress = 0;
+    this.g.ui.spawnShake(() => this.onShake(), '點擊 SHAKE 讓魚更快上鉤！');
   }
 
   retrieve() {
+    this.g.ui.clearShake();
     if (this.state === 'waiting') {
       const b = this.rod.bobber.position;
       this.g.fx.splash(b.clone(), 0.25, b.y);
@@ -201,40 +209,32 @@ export class Fishing {
   }
 
   bite() {
+    this.g.ui.clearShake();
     this.state = 'bite';
     this.t = 0;
-    this.catch = rollFish(this.pool, this.stats.luck, this.g.sky.isNight());
     const b = this.rod.bobber.position;
     this.g.fx.splash(b.clone(), 0.8, b.y);
     this.g.water.addRipple(b.x, b.z, 1.4);
     this.g.sound.bite();
     this.g.cam.shake(0.25);
     this.excl.visible = true;
+    this.excl.scale.set(0.01, 0.01, 1);
+    this.excl.position.copy(this.g.player.pos).y += 3.05;
     this.rod.impulse(10);
   }
 
-  startShake() {
-    this.state = 'shake';
-    this.t = 0;
-    const ri = rarityById[this.catch.fish.rarity].index;
-    this.shakesLeft = clamp(3 + Math.floor(ri * 0.8), 3, 9);
-    this.g.ui.spawnShake(() => this.onShake(), this.shakesLeft);
-  }
-
   onShake() {
-    this.shakesLeft--;
+    if (this.state !== 'waiting') return;
+    this.lureProgress += 1 / this.shakesNeeded;
+    this.nibble = 1;
     this.g.sound.shake();
     const b = this.rod.bobber.position;
     this.g.fx.splash(b.clone(), 0.35, b.y);
     this.g.water.addRipple(b.x, b.z, 0.7);
     this.rod.impulse(8);
     this.g.cam.shake(0.08);
-    if (this.shakesLeft <= 0) {
-      this.g.ui.clearShake();
-      this.startReel();
-    } else {
-      setTimeout(() => { if (this.state === 'shake') this.g.ui.spawnShake(() => this.onShake(), this.shakesLeft); }, 90);
-    }
+    if (this.lureProgress >= 1) this.bite();
+    else setTimeout(() => { if (this.state === 'waiting') this.g.ui.spawnShake(() => this.onShake(), '點擊 SHAKE 讓魚更快上鉤！'); }, 90);
   }
 
   startReel() {
@@ -413,7 +413,8 @@ export class Fishing {
         rod.bobber.rotation.x = Math.cos(time * 1.3) * 0.08;
         rod.targetBend = 0.12 + this.nibble * 0.2;
         sag = 0.45;
-        if (this.t >= this.waitTime) this.bite();
+        this.lureProgress += dt / this.waitTime;
+        if (this.lureProgress >= 1) this.bite();
         break;
       }
       case 'bite': {
@@ -423,10 +424,12 @@ export class Fishing {
         b.x += Math.sin(time * 30) * 0.01;
         rod.targetBend = 0.7;
         sag = 0.0;
-        this.excl.position.set(b.x, surf + 1.6 + Math.sin(this.t * 12) * 0.1, b.z);
-        const s = Math.min(1, this.t * 6) * (1 + Math.sin(this.t * 10) * 0.08);
-        this.excl.scale.set(2.2 * s, 2.2 * s, 1);
-        if (this.t > 0.45) this.startShake();
+        // big "!" pops up above the player's head
+        const pp = this.g.player.pos;
+        this.excl.position.set(pp.x, pp.y + 3.05 + Math.sin(this.t * 12) * 0.06, pp.z);
+        const s = Math.min(1, this.t * 7) * (1 + Math.max(0, 0.35 - this.t) * 2 + Math.sin(this.t * 10) * 0.05);
+        this.excl.scale.set(1.3 * s, 1.3 * s, 1);
+        if (this.t > 0.65) this.startReel();
         break;
       }
       case 'shake': {
@@ -451,13 +454,14 @@ export class Fishing {
         const mg = this.mg;
         const p = this.g.player.pos;
         const toP = new THREE.Vector3(p.x - this.reelStart.x, 0, p.z - this.reelStart.z);
-        const distTotal = toP.length();
         toP.normalize();
         const perp = new THREE.Vector3(-toP.z, 0, toP.x);
-        this.lateral = damp(this.lateral, (mg.fishPos - 0.5) * 6, 3, dt);
-        const pull = Math.min(mg.progress * 0.75, Math.max(0, (distTotal - 3) / distTotal));
-        let nx = this.reelStart.x + toP.x * distTotal * pull + perp.x * this.lateral;
-        let nz = this.reelStart.z + toP.z * distTotal * pull + perp.z * this.lateral;
+        // The fish stays where it bit (no pulling toward the player): it only
+        // thrashes side to side around that spot. The catch happens when the
+        // progress bar reaches 100%.
+        this.lateral = damp(this.lateral, (mg.fishPos - 0.5) * 3, 3, dt);
+        const nx = this.reelStart.x + perp.x * this.lateral;
+        const nz = this.reelStart.z + perp.z * this.lateral;
         const w = waterAt(nx, nz);
         if (w) { b.x = damp(b.x, nx, 4, dt); b.z = damp(b.z, nz, 4, dt); }
         const surf = waterSurfaceY(b.x, b.z, this.water.level, this.water.pond);
@@ -478,9 +482,13 @@ export class Fishing {
       }
       case 'caught': {
         const p = this.g.player.pos;
-        const holdPos = new THREE.Vector3(p.x, p.y + 3.35 + Math.min(1.2, this.fishSize * 0.12), p.z);
+        // hold the fish just above the two raised hands
+        const hl = this.g.player.rig.handL.getWorldPosition(new THREE.Vector3());
+        const hr = this.g.player.rig.handR.getWorldPosition(new THREE.Vector3());
+        const holdPos = hl.add(hr).multiplyScalar(0.5);
+        holdPos.y += 0.12 + Math.min(1.2, this.fishSize * 0.1);
         const fwd = this.g.player.forward();
-        holdPos.addScaledVector(fwd, 0.25);
+        holdPos.addScaledVector(fwd, 0.05);
         const fm = this.fishModel;
         const flyDur = 0.75;
         if (this.t < flyDur) {
@@ -576,6 +584,7 @@ export class Fishing {
     p.torso = damp(p.torso, t.torso, 8, dt);
     rig.armR.rotation.x = p.rX;
     rig.armR.rotation.z = p.rZ;
+    rig.elbowR.rotation.x = -0.2;
     if (t.lX !== null) {
       p.lX = damp(p.lX, t.lX, k, dt);
       p.lZ = damp(p.lZ, t.lZ, k, dt);
@@ -583,6 +592,7 @@ export class Fishing {
       if (this.state === 'reeling' && (this.holding || this.g.input.space)) crank = Math.sin(time * 22) * 0.18;
       rig.armL.rotation.x = p.lX + crank;
       rig.armL.rotation.z = p.lZ;
+      rig.elbowL.rotation.x = this.state === 'caught' ? -0.2 : -0.65;
     } else {
       p.lX = rig.armL.rotation.x; p.lZ = rig.armL.rotation.z;
     }

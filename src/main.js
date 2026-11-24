@@ -3,7 +3,7 @@ import { state, loadState, saveState, resetState } from './state.js';
 import { buildHeightTexture, buildSeabed, terrainHeight, zoneAt, waterAt } from './world/terrain.js';
 import { groundHeight } from './world/collision.js';
 import { WaterSystem } from './world/water.js';
-import { DayNight } from './world/sky.js';
+import { DayNight, DAY_LENGTH } from './world/sky.js';
 import { buildWorld } from './world/islands.js';
 import { nightLights, animated, occluders, M } from './world/props.js';
 import { Ambient } from './world/ambient.js';
@@ -17,6 +17,11 @@ import { Dialogue } from './npc/dialogue.js';
 import { Quests } from './npc/quests.js';
 import { UI } from './ui/ui.js';
 import { Sound } from './audio/audio.js';
+import { NameModal } from './ui/nameModal.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 const OCEAN = { id: 'ocean', name: 'Open Sea', subtitle: '一望無際的外海' };
 
@@ -36,10 +41,21 @@ class Game {
     this.renderer = r;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
+    // post-processing: HDR render → soft bloom (sun glints, lanterns, sparkles) → tone mapping
+    const rt = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, { type: THREE.HalfFloatType, samples: 4 });
+    this.composer = new EffectComposer(r, rt);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 4, window.innerHeight / 4), 0.32, 0.55, 0.92);
+    // the glow is soft anyway: run the blur chain at quarter resolution (much cheaper)
+    const bloomSetSize = this.bloom.setSize.bind(this.bloom);
+    this.bloom.setSize = (w, h) => bloomSetSize(Math.max(1, Math.round(w / 4)), Math.max(1, Math.round(h / 4)));
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       r.setSize(window.innerWidth, window.innerHeight);
+      this.composer.setSize(window.innerWidth, window.innerHeight);
     });
 
     this.terrainH = terrainHeight;
@@ -64,6 +80,8 @@ class Game {
     this.quests = new Quests(this);
     this.dialogue = new Dialogue(this);
     this.npcs = this.world.npcs.map((d) => new NPC(this, d));
+    this.nameModal = new NameModal(this);
+    if (state.playerName) this.applyPlayerName(state.playerName);
 
     const sp = state.pos || this.world.spawn;
     this.player.teleport(sp.x, sp.z, sp.yaw ?? this.world.spawn.yaw);
@@ -73,7 +91,7 @@ class Game {
       this.player.teleport(s.x, s.z, s.yaw);
     }
     this.cam.yaw = this.player.yaw;
-    this.cam.update(0, this.player.pos.clone().add(new THREE.Vector3(0, 2.2, 0)), true);
+    this.cam.update(0, this.player.pos.clone().add(new THREE.Vector3(0, 1.8, 0)), true);
 
     this.ui.setMoney(state.money);
     this.ui.onSelectSlot = (n) => this.selectSlot(n);
@@ -97,6 +115,8 @@ class Game {
     const keyMap = { KeyW: 'f', ArrowUp: 'f', KeyS: 'b', ArrowDown: 'b', KeyA: 'l', ArrowLeft: 'l', KeyD: 'r', ArrowRight: 'r' };
     window.addEventListener('keydown', (e) => {
       if (!this.started) return;
+      // typing a name: don't move / jump / open panels
+      if (this.nameModal.isOpen || e.target.tagName === 'INPUT') return;
       if (keyMap[e.code]) this.input[keyMap[e.code]] = true;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.input.shift = true;
       if (e.code === 'Space') {
@@ -107,7 +127,11 @@ class Game {
       }
       if (e.repeat) return;
       if (e.code === 'KeyE') this.interact();
-      if (e.code === 'Escape') { if (this.dialogue.open) this.dialogue.close(); for (const k of Object.keys(this.ui.panels)) this.ui.togglePanel(k, false); }
+      if (e.code === 'Escape') {
+        if (this.dialogue.open) this.dialogue.close();
+        else if (this.ui.anyPanelOpen()) { for (const k of Object.keys(this.ui.panels)) this.ui.togglePanel(k, false); }
+        else this.ui.togglePanel('menu', true);
+      }
       if (e.code === 'KeyB') this.ui.togglePanel('backpack');
       if (e.code === 'KeyN') this.ui.togglePanel('dex');
       if (e.code === 'KeyH') this.ui.togglePanel('help');
@@ -124,7 +148,7 @@ class Game {
     this.renderer.domElement.addEventListener('mousedown', (e) => {
       if (!this.started || e.button !== 0) return;
       this.sound.init();
-      if (this.dialogue.open || this.ui.anyPanelOpen()) return;
+      if (this.dialogue.open || this.ui.anyPanelOpen() || this.nameModal.isOpen) return;
       if (this.fishing.equipped) this.fishing.mouseDown();
     });
     window.addEventListener('mouseup', (e) => { if (e.button === 0) this.fishing.mouseUp(); });
@@ -132,6 +156,14 @@ class Game {
     document.querySelector('#btnBag').onclick = () => this.ui.togglePanel('backpack');
     document.querySelector('#btnDex').onclick = () => this.ui.togglePanel('dex');
     document.querySelector('#btnHelp').onclick = () => this.ui.togglePanel('help');
+    // ---- pause / exit menu
+    const q = (s) => document.querySelector(s);
+    q('#btnMenu').onclick = () => this.ui.togglePanel('menu');
+    q('#mResume').onclick = () => this.ui.togglePanel('menu', false);
+    q('#mHelp').onclick = () => this.ui.togglePanel('help', true);
+    q('#mTitle').onclick = () => this.backToTitle();
+    q('#mQuit').onclick = () => this.quitGame();
+    q('#qsBack').onclick = () => q('#quitScreen').classList.add('hidden'); // back to the title screen
     document.querySelector('#btnStart').onclick = () => this.start();
     document.querySelector('#btnReset').onclick = () => {
       if (confirm('確定要清除存檔、從頭開始嗎？')) { resetState(); this.noSave = true; location.reload(); }
@@ -145,6 +177,45 @@ class Game {
     document.querySelector('#start').classList.add('hidden');
     this.zoneKey = null; // force banner
     if (!state.quests.tutorial) setTimeout(() => this.ui.toast('👉 去找頭上有「!」的導師・阿凱 說話吧！', '#ffd75e'), 1500);
+  }
+
+  playerName() { return state.playerName || '新手釣客'; }
+
+  applyPlayerName(name) {
+    this.player.setName(name);
+    const tag = document.querySelector('#playerNameTag');
+    tag.textContent = `👤 ${name}`;
+    tag.classList.toggle('hidden', !name);
+  }
+
+  setPlayerName(name) {
+    const first = !state.playerName;
+    state.playerName = name;
+    saveState();
+    this.applyPlayerName(name);
+    this.sound.jingle(3);
+    this.ui.toast(first ? `🎉 從今天起你就是「${name}」了！` : `✏️ 名字已改成「${name}」`, '#9fe6ff');
+  }
+
+  /** Save and return to the title screen. */
+  backToTitle() {
+    this.ui.togglePanel('menu', false);
+    if (this.dialogue.open) this.dialogue.close();
+    this.fishing.equip(false);
+    this.player.holdFish(null);
+    this.ui.selected = 0;
+    this.ui.renderHotbar();
+    for (const k of Object.keys(this.input)) this.input[k] = false;
+    this.save();
+    this.started = false;
+    document.querySelector('#start').classList.remove('hidden');
+  }
+
+  /** Save and leave. Browsers only let scripts close windows they opened, so show a goodbye screen otherwise. */
+  quitGame() {
+    this.backToTitle();
+    document.querySelector('#quitScreen').classList.remove('hidden');
+    try { window.close(); } catch (e) { /* not allowed */ }
   }
 
   save() {
@@ -257,7 +328,7 @@ class Game {
     if (npc) npc.talking = open;
     document.body.classList.toggle('in-dialogue', open);
     if (open && npc) {
-      const mid = this.player.pos.clone().lerp(npc.pos, 0.5).add(new THREE.Vector3(0, 2.3, 0));
+      const mid = this.player.pos.clone().lerp(npc.pos, 0.5).add(new THREE.Vector3(0, 1.8, 0));
       this.cam.override = { pos: mid, dist: 9 };
       this.player.yaw = Math.atan2(npc.pos.x - this.player.pos.x, npc.pos.z - this.player.pos.z);
     } else {
@@ -287,6 +358,20 @@ class Game {
     }
   }
 
+  /** Real-world clock (1 second = 1 second) + countdown to the next in-game day/night change. */
+  updateClock() {
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const night = this.sky.isNight();
+    // in-game night starts at 18:36 (t=0.775) and ends at 05:36 (t≈0.2333)
+    const target = night ? 5.6 / 24 : 18.6 / 24;
+    let frac = target - this.sky.t;
+    if (frac < 0) frac += 1;
+    const secs = Math.ceil(frac * DAY_LENGTH);
+    const sub = `${night ? '距離天亮' : '距離天黑'} ${Math.floor(secs / 60)}:${p2(secs % 60)}`;
+    this.ui.setClock(`${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`, night, sub);
+  }
+
   updateWaypoint() {
     let target = this.quests.currentTarget();
     if (!target && this.quests.canStart('tutorial')) target = 'tutor';
@@ -294,10 +379,10 @@ class Game {
     if (!npc || this.dialogue.open) { this.ui.waypoint(false); return; }
     const dist = npc.pos.distanceTo(this.player.pos);
     if (dist < 8) { this.ui.waypoint(false); return; }
-    const s = this.worldToScreen(npc.pos.clone().add(new THREE.Vector3(0, 5.6, 0)));
+    const s = this.worldToScreen(npc.pos.clone().add(new THREE.Vector3(0, 4.2, 0)));
     const W = window.innerWidth, H = window.innerHeight;
     // keep clear of the hotbar / rod panel (bottom) and quest list / money (top)
-    const mx = 110, top = 120, bottom = 160;
+    const mx = 110, top = 120, bottom = 210;
     const cy = (top + (H - bottom)) / 2, hh = ((H - bottom) - top) / 2, hw = W / 2 - mx;
     let { x, y } = s;
     let angle = null;
@@ -316,7 +401,7 @@ class Game {
     const dt = Math.min(0.05, this.clock.getDelta());
     this.time += dt;
     const t = this.time;
-    const blocked = !this.started || this.dialogue.open || this.ui.anyPanelOpen();
+    const blocked = !this.started || this.dialogue.open || this.ui.anyPanelOpen() || this.nameModal.isOpen;
 
     this.sky.update(dt, this.player.pos, t);
     const night = this.sky.night;
@@ -329,7 +414,7 @@ class Game {
     this.dialogue.update(dt);
 
     if (!this.started) this.cam.yaw += dt * 0.05;
-    this.cam.update(dt, this.player.pos.clone().add(new THREE.Vector3(0, 2.2, 0)));
+    this.cam.update(dt, this.player.pos.clone().add(new THREE.Vector3(0, 1.8, 0)));
     this.water.update(t, this.camera, this.sky);
     this.fx.update(dt);
     this.ambient.update(dt, t, this.player.pos, night);
@@ -339,7 +424,7 @@ class Game {
     M.lampGlass.emissiveIntensity = 0.2 + night * 3;
 
     this.updateZone(dt);
-    this.ui.setClock(this.sky.clockString(), this.sky.isNight());
+    this.updateClock();
     this.interactTarget = this.started && !this.dialogue.open ? this.findInteract() : null;
     this.ui.setInteract(this.interactTarget ? this.interactTarget.label : null);
     this.updateWaypoint();
@@ -349,7 +434,8 @@ class Game {
     this.saveTimer += dt;
     if (this.saveTimer > 10 && this.started) { this.saveTimer = 0; this.save(); }
 
-    this.renderer.render(this.scene, this.camera);
+    this.sky.updateEnv(this.renderer, dt);
+    this.composer.render();
   }
 }
 
