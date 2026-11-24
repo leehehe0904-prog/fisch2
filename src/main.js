@@ -18,6 +18,7 @@ import { Quests } from './npc/quests.js';
 import { UI } from './ui/ui.js';
 import { Sound } from './audio/audio.js';
 import { NameModal } from './ui/nameModal.js';
+import { BAITS, CRATE, rollCrate, equippedBait } from './fishing/baits.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -95,7 +96,10 @@ class Game {
 
     this.ui.setMoney(state.money);
     this.ui.onSelectSlot = (n) => this.selectSlot(n);
-    this.ui.renderHotbar();
+    this.ui.onSelectKey = (k, force) => this.selectKey(k, force);
+    this.ui.onOpenCrate = () => this.openCrate();
+    this.ui.onEquipBait = (id) => this.equipBait(id);
+    this.refreshHotbar();
     this.quests.render();
 
     this.started = false;
@@ -116,7 +120,7 @@ class Game {
     window.addEventListener('keydown', (e) => {
       if (!this.started) return;
       // typing a name: don't move / jump / open panels
-      if (this.nameModal.isOpen || e.target.tagName === 'INPUT') return;
+      if (this.nameModal.isOpen || this.ui.confirmOpen || e.target.tagName === 'INPUT') return;
       if (keyMap[e.code]) this.input[keyMap[e.code]] = true;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.input.shift = true;
       if (e.code === 'Space') {
@@ -134,6 +138,7 @@ class Game {
       }
       if (e.code === 'KeyB') this.ui.togglePanel('backpack');
       if (e.code === 'KeyN') this.ui.togglePanel('dex');
+      if (e.code === 'KeyV') this.ui.togglePanel('bait');
       if (e.code === 'KeyH') this.ui.togglePanel('help');
       if (e.code === 'Enter' && this.dialogue.open) this.dialogue.advance();
       const m = e.code.match(/^Digit([1-9])$/);
@@ -148,13 +153,15 @@ class Game {
     this.renderer.domElement.addEventListener('mousedown', (e) => {
       if (!this.started || e.button !== 0) return;
       this.sound.init();
-      if (this.dialogue.open || this.ui.anyPanelOpen() || this.nameModal.isOpen) return;
+      if (this.dialogue.open || this.ui.anyPanelOpen() || this.nameModal.isOpen || this.ui.confirmOpen) return;
+      if (this.ui.selectedKey === 'crate') { this.openCrate(); return; }
       if (this.fishing.equipped) this.fishing.mouseDown();
     });
     window.addEventListener('mouseup', (e) => { if (e.button === 0) this.fishing.mouseUp(); });
 
     document.querySelector('#btnBag').onclick = () => this.ui.togglePanel('backpack');
     document.querySelector('#btnDex').onclick = () => this.ui.togglePanel('dex');
+    document.querySelector('#btnBait').onclick = () => this.ui.togglePanel('bait');
     document.querySelector('#btnHelp').onclick = () => this.ui.togglePanel('help');
     // ---- pause / exit menu
     const q = (s) => document.querySelector(s);
@@ -203,8 +210,9 @@ class Game {
     if (this.dialogue.open) this.dialogue.close();
     this.fishing.equip(false);
     this.player.holdFish(null);
-    this.ui.selected = 0;
-    this.ui.renderHotbar();
+    this.ui.selectedKey = null;
+    this.player.holdCrate(false);
+    this.refreshHotbar();
     for (const k of Object.keys(this.input)) this.input[k] = false;
     this.save();
     this.started = false;
@@ -225,42 +233,122 @@ class Game {
   }
 
   // ---------------------------------------------------------------- hotbar
+  /** Slot order: 1 = rod, 2 = bait crate (if you own one), then fish. */
+  hotbarItems() {
+    const items = [{ key: 'rod', type: 'rod' }];
+    if (state.baitCrates > 0) items.push({ key: 'crate', type: 'crate' });
+    for (const f of state.inventory) {
+      if (items.length >= 9) break;
+      items.push({ key: 'fish:' + f.uid, type: 'fish', item: f });
+    }
+    return items;
+  }
+
+  refreshHotbar() { this.ui.renderHotbar(this.hotbarItems(), this.ui.selectedKey); }
+
+  /** number key / hotbar click. 0 = put everything away */
   selectSlot(n) {
+    if (n === 0) { this.selectKey(null); return; }
+    const e = this.hotbarItems()[n - 1];
+    if (e) this.selectKey(e.key);
+  }
+
+  selectKey(key, force = false) {
     const ui = this.ui;
-    if (n === 0 || (n === ui.selected && n !== 0)) {
+    if (key === null || (key === ui.selectedKey && !force)) {
       this.fishing.equip(false);
       this.player.holdFish(null);
-      ui.selected = 0;
-      ui.renderHotbar();
+      this.player.holdCrate(false);
+      ui.selectedKey = null;
+      this.refreshHotbar();
       return;
     }
-    if (n === 1) {
+    if (key === 'rod') {
       if (this.player.swimming) { ui.toast('游泳時不能拿釣竿！', '#ffb3b3'); return; }
       this.player.holdFish(null);
+      this.player.holdCrate(false);
       this.fishing.equip(true);
-      ui.selected = 1;
       this.quests.onEvent('equip');
+    } else if (key === 'crate') {
+      if (state.baitCrates <= 0) return;
+      this.fishing.equip(false);
+      this.player.holdFish(null);
+      this.player.holdCrate(true);
+      ui.toast('點一下畫面就能開啟誘餌箱', '#ffe9a8');
     } else {
-      const item = state.inventory[n - 2];
+      const uid = parseInt(key.split(':')[1], 10);
+      const item = state.inventory.find((f) => f.uid === uid);
       if (!item) return;
       this.fishing.equip(false);
+      this.player.holdCrate(false);
       this.player.holdFish(item);
-      ui.selected = n;
     }
-    ui.renderHotbar();
+    ui.selectedKey = key;
+    this.refreshHotbar();
   }
 
   onInventoryChanged() {
     const held = this.player.heldFish;
     if (held) {
       const idx = state.inventory.indexOf(held);
-      if (idx < 0) { this.player.holdFish(null); this.ui.selected = this.fishing.equipped ? 1 : 0; }
-      else if (idx >= 8) { state.inventory.splice(idx, 1); state.inventory.unshift(held); this.ui.selected = 2; }
-      else this.ui.selected = idx + 2;
+      if (idx < 0) { this.player.holdFish(null); this.ui.selectedKey = this.fishing.equipped ? 'rod' : null; }
+      else if (!this.hotbarItems().some((e) => e.key === 'fish:' + held.uid)) { state.inventory.splice(idx, 1); state.inventory.unshift(held); }
     }
-    this.ui.renderHotbar();
+    if (this.ui.selectedKey === 'crate' && state.baitCrates <= 0) { this.player.holdCrate(false); this.ui.selectedKey = null; }
+    this.refreshHotbar();
     if (!this.ui.panels.backpack.classList.contains('hidden')) this.ui.renderBackpack();
+    if (!this.ui.panels.bait.classList.contains('hidden')) this.ui.renderBait();
+    if (this.fishing.equipped) this.ui.showRodStats(true);
     this.quests.render();
+  }
+
+  // ---------------------------------------------------------------- bait
+  async openCrate() {
+    if (state.baitCrates <= 0 || this.ui.confirmOpen) return;
+    const ok = await this.ui.confirm({ icon: CRATE.icon, text: '你要開啟這個魚餌箱嗎？', sub: `剩下 ${state.baitCrates} 個誘餌箱`, yes: '開啟', no: '取消' });
+    if (!ok || state.baitCrates <= 0) return;
+    state.baitCrates--;
+    const { baitId, amount } = rollCrate();
+    const bait = BAITS[baitId];
+    state.baits[baitId] = (state.baits[baitId] || 0) + amount;
+    let autoEquip = false;
+    if (!equippedBait()) { state.equippedBait = baitId; autoEquip = true; }
+    saveState();
+    // shake the crate, then burst it open
+    this.player.crateShake = 0.55;
+    this.sound.tick();
+    setTimeout(() => {
+      const p = this.player.rig.handR.getWorldPosition(new THREE.Vector3());
+      this.fx.burst(p, 0xc8a165, 26, 4.5, 0.45, 1.0);
+      this.fx.burst(p, 0xfff2a0, 20, 3, 0.35, 1.2);
+      this.sound.coin();
+      this.sound.jingle(2);
+      this.ui.rewardPopup(`獲得 ${bait.icon} ${bait.name} ×${amount}`, autoEquip ? '已自動裝上魚餌（上鉤速度 +' + bait.lure + '%）' : `現在共有 ${state.baits[baitId]} 個`);
+      this.onInventoryChanged();
+    }, 550);
+  }
+
+  equipBait(id) {
+    if (id && !(state.baits[id] > 0)) return;
+    state.equippedBait = id;
+    saveState();
+    this.sound.click();
+    this.ui.toast(id ? `已裝上 ${BAITS[id].icon} ${BAITS[id].name}` : '已卸下魚餌', '#c8ff8a');
+    this.onInventoryChanged();
+  }
+
+  /** shop: buy n bait crates */
+  buyCrates(n) {
+    const cost = CRATE.price * n;
+    if (state.money < cost) return false;
+    state.money -= cost;
+    state.baitCrates += n;
+    saveState();
+    this.ui.setMoney(state.money, true);
+    this.sound.coin();
+    this.ui.toast(`獲得 ${CRATE.icon} ${CRATE.name} ×${n}（在快捷列，選取後點一下畫面開啟）`, '#ffe9a8');
+    this.onInventoryChanged();
+    return true;
   }
 
   // ---------------------------------------------------------------- interaction
@@ -401,7 +489,7 @@ class Game {
     const dt = Math.min(0.05, this.clock.getDelta());
     this.time += dt;
     const t = this.time;
-    const blocked = !this.started || this.dialogue.open || this.ui.anyPanelOpen() || this.nameModal.isOpen;
+    const blocked = !this.started || this.dialogue.open || this.ui.anyPanelOpen() || this.nameModal.isOpen || this.ui.confirmOpen;
 
     this.sky.update(dt, this.player.pos, t);
     const night = this.sky.night;

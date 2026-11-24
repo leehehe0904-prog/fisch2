@@ -13,6 +13,9 @@ export const state = {
   totalCaught: 0,
   tutorialSeen: false,
   playerName: null, // chosen when the tutorial quest is completed
+  baitCrates: 0,    // unopened bait crates
+  baits: {},        // baitId -> count
+  equippedBait: null,
 };
 
 /** Validate a player name. Returns { ok, name, error }. */

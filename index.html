@@ -45,6 +45,7 @@
 
     <div id="sideBtns">
       <button id="btnBag" title="背包 (B)">🎒<span>背包</span></button>
+      <button id="btnBait" title="魚餌 (V)">🐛<span>魚餌</span></button>
       <button id="btnDex" title="圖鑑 (N)">📖<span>圖鑑</span></button>
       <button id="btnHelp" title="操作說明 (H)">❔<span>說明</span></button>
       <button id="btnMenu" title="選單 (Esc)">☰<span>選單</span></button>
@@ -65,6 +66,20 @@
       <div class="panel-head"><span>🎒 背包</span><button class="close">✕</button></div>
       <div class="bp-summary"></div>
       <div class="bp-grid"></div>
+    </div>
+
+    <div id="baitPanel" class="panel hidden">
+      <div class="panel-head"><span>🐛 魚餌</span><button class="close">✕</button></div>
+      <div class="bait-body"></div>
+    </div>
+
+    <div id="confirmModal" class="hidden">
+      <div class="cm-card">
+        <div class="cm-icon">📦</div>
+        <div class="cm-text">你要開啟這個魚餌箱嗎？</div>
+        <div class="cm-sub"></div>
+        <div class="cm-btns"><button class="cm-no gray">取消</button><button class="cm-yes green">開啟</button></div>
+      </div>
     </div>
 
     <div id="dex" class="panel hidden">
@@ -93,7 +108,8 @@
         <p><b>按住左鍵</b> 蓄力，<b>放開</b> 甩竿（要甩到水裡）</p>
         <p>浮標落水後畫面會出現 <b>SHAKE</b> 按鈕，點越多下魚越快上鉤；頭上冒出 <b>!</b> 就是魚上鉤了</p>
         <p>收線小遊戲：<b>按住左鍵/空白鍵</b> 白條往右、放開往左，讓魚待在白條內直到進度條滿</p>
-        <p><b>E</b> 與 NPC 對話 / 上下船　<b>B</b> 背包　<b>N</b> 圖鑑　<b>H</b> 說明</p>
+        <p><b>E</b> 與 NPC 對話 / 上下船　<b>B</b> 背包　<b>V</b> 魚餌　<b>N</b> 圖鑑　<b>H</b> 說明</p>
+        <p><b>誘餌箱</b>：到釣具店找小美買（$20），在快捷列選取後點一下畫面就能開啟，裡面有魚餌</p>
         <p>開船：<b>W/S</b> 油門 / 倒退，<b>A/D</b> 轉向</p>
         <hr/>
         <p><b>釣竿屬性</b></p>

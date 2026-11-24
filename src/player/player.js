@@ -6,7 +6,7 @@ import { waterSurfaceY } from '../world/water.js';
 import { damp, angleDamp } from '../core/noise.js';
 import { buildFishModel, fishVisualLength } from '../fishing/fishModel.js';
 import { fishById } from '../fishing/fishData.js';
-import { makeLabelSprite } from '../world/props.js';
+import { makeLabelSprite, crate as crateModel } from '../world/props.js';
 
 export class Player {
   constructor(game) {
@@ -56,6 +56,19 @@ export class Player {
     m.position.set(0, -0.12, 0.05);
     this.rig.handR.add(m);
     this.heldModel = m;
+  }
+
+  /** wooden bait crate held in front of the body */
+  holdCrate(on) {
+    if (this.crateModel) { this.crateModel.parent.remove(this.crateModel); this.crateModel = null; }
+    if (!on) return;
+    const c = crateModel(0.42);
+    c.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    c.rotation.set(1.1, 0, 0);
+    c.position.set(0, -0.32, 0.05);
+    this.rig.handR.add(c);
+    this.crateModel = c;
+    this.crateShake = 0;
   }
 
   update(dt, time, input, blocked) {
@@ -175,6 +188,15 @@ export class Player {
     // the caught fish is held above the head: hide the tag meanwhile
     if (this.nameTag) this.nameTag.visible = this.g.fishing.state !== 'caught';
     r.animate(dt, time, speed, mode);
+    if (this.crateModel && mode !== 'swim') {
+      r.armR.rotation.x = -1.1; r.armR.rotation.z = -0.1; r.elbowR.rotation.x = 0;
+      r.armL.rotation.x = -1.0; r.armL.rotation.z = 0.35; r.elbowL.rotation.x = -0.3;
+      if (this.crateShake > 0) {
+        this.crateShake -= dt;
+        this.crateModel.rotation.z = Math.sin(time * 60) * 0.25;
+        this.crateModel.rotation.y = Math.cos(time * 45) * 0.2;
+      } else { this.crateModel.rotation.z = 0; this.crateModel.rotation.y = 0; }
+    }
     if (this.heldFish && mode !== 'swim') {
       r.armR.rotation.x = -1.1; r.armR.rotation.z = -0.1; r.elbowR.rotation.x = 0;
       if (this.heldModel) this.heldModel.userData.update(time, 0.25);

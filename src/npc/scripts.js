@@ -2,6 +2,7 @@ import { state, saveState, removeFish } from '../state.js';
 import { QUESTS } from './quests.js';
 import { fishById, rarityById, formatWeight, RARITIES } from '../fishing/fishData.js';
 import { RODS } from '../fishing/rod.js';
+import { BAITS, CRATE } from '../fishing/baits.js';
 
 // ------------------------------------------------------------------ helpers
 function close(g) { return () => g.dialogue.close(); }
@@ -140,9 +141,26 @@ export const SCRIPTS = {
 
   rodshop(g, npc) {
     const r = RODS.starter;
+    const buy = (n) => () => {
+      if (!g.buyCrates(n)) {
+        g.dialogue.run(npc, [{ text: `${n} 個要 $${CRATE.price * n}，你的錢好像不太夠喔……去釣點魚賣掉再來吧！`, options: [{ label: '好吧', cls: 'gray', action: close(g) }] }]);
+        return;
+      }
+      g.dialogue.run(npc, [{ text: `謝謝惠顧！${n} 個誘餌箱已經放進你的快捷列了。選取誘餌箱之後，點一下畫面就能打開喔！`, options: [
+        { label: '再買一些', action: () => SCRIPTS.rodshop(g, npc) },
+        { label: '謝謝！', cls: 'gray', action: close(g) },
+      ] }]);
+    };
     g.dialogue.run(npc, [{
-      text: '歡迎光臨釣具店！目前店裡只有「新手釣竿」，更厲害的釣竿還在從大陸運過來的路上……',
+      text: '歡迎光臨釣具店！店裡有「新手釣竿」，還有超受歡迎的誘餌箱，打開會有魚餌，裝上魚餌魚會更快上鉤！',
       options: [
+        { label: `買誘餌箱 1 個（$${CRATE.price}）`, cls: 'green', action: buy(1) },
+        { label: `買誘餌箱 5 個（$${CRATE.price * 5}）`, cls: 'green', action: buy(5) },
+        { label: '魚餌是什麼？', action: () => g.dialogue.run(npc, [
+          `誘餌箱一個 $${CRATE.price}，打開會得到 2~5 個${BAITS.worm.icon}${BAITS.worm.name}。`,
+          `${BAITS.worm.name}是最基本的魚餌，裝上之後上鉤速度 +${BAITS.worm.lure}%！每釣到一條魚會用掉 1 個。`,
+          { text: '按 V 或右邊的「魚餌」按鈕，就能裝上或卸下魚餌。', options: [{ label: '了解！', cls: 'gray', action: () => SCRIPTS.rodshop(g, npc) }] },
+        ]) },
         { label: '看看新手釣竿', action: () => g.dialogue.run(npc, [
           `【${r.name}】${r.desc}`,
           `上鉤速度 ${r.lure}%・運氣 ${r.luck}%・控制力 ${r.control}・復原力 ${r.resilience}%・最大重量 ${r.maxWeight.toLocaleString()} kg`,

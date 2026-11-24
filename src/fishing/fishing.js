@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Rod, RODS } from './rod.js';
+import { baitBonus, consumeBait, BAITS } from './baits.js';
 import { rollFish, fishValue, fishDifficulty, rarityById, formatWeight } from './fishData.js';
 import { buildFishModel, fishVisualLength } from './fishModel.js';
 import { waterAt, terrainHeight } from '../world/terrain.js';
@@ -212,14 +213,14 @@ export class Fishing {
     this.g.sound.splash(strength);
     this.state = 'waiting';
     this.t = 0;
-    const lure = this.stats.lure;
+    const lure = Math.min(100, this.stats.lure + baitBonus('lure')); // bait adds lure speed
     this.waitTime = lure >= 100 ? 0.2 : rand(5, 14) * (1 - lure / 100) + 0.4;
     this.nibbleTimer = rand(1.2, 2.5);
     this.pool = this.water.pond ? 'pond' : (this.water.island ? this.water.island.id : 'ocean');
     this.rod.impulse(3);
     // Fisch-style: the fish is decided now and SHAKE buttons appear right away.
     // The lure fills by itself (lure speed) and every shake fills it faster.
-    this.catch = rollFish(this.pool, this.stats.luck, this.g.sky.isNight());
+    this.catch = rollFish(this.pool, this.stats.luck + baitBonus('luck'), this.g.sky.isNight());
     const ri = rarityById[this.catch.fish.rarity].index;
     this.shakesNeeded = clamp(4 + Math.floor(ri * 0.8), 4, 10);
     this.lureProgress = 0;
@@ -337,6 +338,8 @@ export class Fishing {
     let value = fishValue(fish, weight, mutation);
     if (this.mg.perfect) value = Math.round(value * 1.1);
     const { isNew } = addFishToInventory(fish.id, weight, mutation, value);
+    const usedBait = state.equippedBait;
+    if (consumeBait()) this.g.ui.toast(`${BAITS[usedBait].icon} ${BAITS[usedBait].name}用完了！打開誘餌箱可以拿到更多`, '#ffd2a8');
     saveState();
     const b = this.rod.bobber.position.clone();
     const size = fishVisualLength(fish, weight);
